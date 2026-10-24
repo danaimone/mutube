@@ -108,23 +108,24 @@ COBALT_PLAYBACK_PATCHES = [
         "expect": ("add", "x20, x8, x20"),
         "replacement": 0x8B140914,  # add x20, x8, x20, lsl #2
     },
+]
+
+# Late frames: the stock renderer bumps its dropped-frame counter (read back by
+# GetDroppedFrames at 0x101145054) and then enqueues the frame anyway. Skip the
+# enqueue so late frames are discarded, refund their budget slot (w23), and keep
+# counting them so YouTube still sees the drops and can lower the quality. That
+# takes five instructions in a three-instruction slot, so branch out to a stub.
+COBALT_LATE_FRAME_TRAMPOLINES = [
     {
-        "name": "tvos_renderer_drop_late_frame_count",
+        "name": "tvos_renderer_drop_late_frames",
         "va": 0x101144C90,
-        "expect": ("ldr", "x8, [x19, #0x1e0]"),
-        "replacement": 0x110006F7,  # add w23, w23, #1
-    },
-    {
-        "name": "tvos_renderer_drop_late_frame_counter",
-        "va": 0x101144C94,
-        "expect": ("add", "x8, x8, #1"),
-        "replacement": 0xD503201F,  # nop
-    },
-    {
-        "name": "tvos_renderer_drop_late_frame_enqueue",
-        "va": 0x101144C98,
-        "expect": ("str", "x8, [x19, #0x1e0]"),
-        "replacement": 0x14000005,  # b 0x101144cac
+        "expect": [
+            ("ldr", "x8, [x19, #0x1e0]"),
+            ("add", "x8, x8, #1"),
+            ("str", "x8, [x19, #0x1e0]"),
+        ],
+        "extra": [0x110006F7],  # add w23, w23, #1
+        "resume_va": 0x101144CAC,
     },
 ]
 
@@ -176,6 +177,11 @@ def encode_bl(src_pc, dst):
     if not (-(1 << 25) <= imm26 < (1 << 25)):
         raise ValueError("bl target out of range")
     return 0x94000000 | (imm26 & 0x03FFFFFF)
+
+
+def encode_b(src_pc, dst):
+    # Encode a direct ARM64 B from src_pc to dst.
+    return encode_bl(src_pc, dst) & ~0x80000000
 
 
 def read_u32(data, off):
@@ -582,6 +588,33 @@ def patch_binary(data, enable_printf_logs=False, inject_path=None):
                 "patch_site_va": p["site_va"],
                 "stub_va": s["va"],
                 "stub_len": len(s["blob"]),
+            }
+        )
+
+    for t in COBALT_LATE_FRAME_TRAMPOLINES:
+        site_off = va_to_off(info, t["va"])
+        orig = []
+        for i, expect in enumerate(t["expect"]):
+            insn = disasm_one(data[site_off + 4 * i:site_off + 4 * i + 4], t["va"] + 4 * i)
+            if (insn.mnemonic, insn.op_str) != expect:
+                raise ValueError(
+                    f"{t['name']}: at {hex(t['va'] + 4 * i)} expected {expect[0]} {expect[1]}, "
+                    f"got {insn.mnemonic} {insn.op_str}"
+                )
+            orig.append(read_u32(data, site_off + 4 * i))
+        words = orig + t["extra"]
+        stub_off = alloc.alloc(4 * (len(words) + 1), 4)
+        stub_va = f2v(stub_off)
+        words.append(encode_b(stub_va + 4 * len(words), t["resume_va"]))
+        data[stub_off:stub_off + 4 * len(words)] = struct.pack(f"<{len(words)}I", *words)
+        data[site_off:site_off + 4] = struct.pack("<I", encode_b(t["va"], stub_va))
+        out.append(
+            {
+                "name": t["name"],
+                "entry_va": t["va"],
+                "patch_site_va": t["va"],
+                "stub_va": stub_va,
+                "stub_len": 4 * len(words),
             }
         )
 
