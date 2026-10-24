@@ -171,21 +171,6 @@
     ));
   }
 
-  setInterval(function () {
-    if (!window._yttv) return;
-    for (var key in window._yttv) {
-      var instance = window._yttv[key] && window._yttv[key].instance;
-      if (instance && typeof instance.resolveCommand === 'function' && !instance.resolveCommand._hdrHooked) {
-        let original = instance.resolveCommand;
-        instance.resolveCommand = function (command) {
-          try { patchSettingsPopup(command); } catch (e) {}
-          return original.apply(this, arguments);
-        };
-        instance.resolveCommand._hdrHooked = true;
-      }
-    }
-  }, 300);
-
   var QUICK_SKIP_KEY = 'enableQuickSkip';
   var QUICK_SKIP_CONFIG = 'ytaf-configuration';
 
@@ -298,17 +283,21 @@
     items.push(createQuickSkipSetting(items.length));
   }
 
+  // One hook for both settings rows. Separate hooks with separate markers each saw the
+  // other's wrapper on top and re-wrapped every tick, growing the chain until resolveCommand
+  // overflowed the stack and popups (TizenTube's speed menu) stopped opening.
   setInterval(function () {
     if (!window._yttv) return;
     for (var key in window._yttv) {
       var instance = window._yttv[key] && window._yttv[key].instance;
-      if (instance && typeof instance.resolveCommand === 'function' && !instance.resolveCommand._quickSkipHooked) {
+      if (instance && typeof instance.resolveCommand === 'function' && !instance.resolveCommand._mutubeHooked) {
         let original = instance.resolveCommand;
         instance.resolveCommand = function (command) {
+          try { patchSettingsPopup(command); } catch (e) {}
           try { addQuickSkipSetting(command); } catch (e) {}
           return original.apply(this, arguments);
         };
-        instance.resolveCommand._quickSkipHooked = true;
+        instance.resolveCommand._mutubeHooked = true;
       }
     }
   }, 300);
