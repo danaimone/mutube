@@ -117,8 +117,55 @@
       (format.colorInfo && /2084|B67|2020/i.test(JSON.stringify(format.colorInfo)));
   }
 
+  // Diagnostic: list the video formats YouTube sent for each video, with bitrate and whether
+  // this build's isTypeSupported accepts them. Built with SHOW_FORMATS = true only.
+  var SHOW_FORMATS = false;
+  var formatsBox = null;
+
+  function showFormats(streamingData) {
+    if (!document.body) return;
+    var lines = streamingData.adaptiveFormats.filter(function (f) {
+      return f && f.mimeType && f.mimeType.indexOf('video/') === 0;
+    }).map(function (f) {
+      var mime = f.mimeType + '; width=' + f.width + '; height=' + f.height + '; framerate=' + f.fps;
+      var codec = (f.mimeType.match(/codecs="([^"]+)"/) || [])[1] || f.mimeType;
+      return f.itag + ' ' + (f.qualityLabel || '?') + ' ' + codec + ' ' +
+        Math.round((f.bitrate || 0) / 1000) + 'k avg ' + Math.round((f.averageBitrate || 0) / 1000) + 'k' +
+        (window.MediaSource.isTypeSupported(mime) ? '' : '  REJECTED');
+    });
+    if (!formatsBox) {
+      formatsBox = document.createElement('div');
+      formatsBox.style.cssText = 'position:fixed;left:40px;top:40px;z-index:2147483647;background:#000;color:#fff;font:18px monospace;padding:12px;white-space:pre;opacity:0.9';
+    }
+    formatsBox.textContent = 'MuTube formats (' + lines.length + ')\n' + lines.join('\n');
+    document.body.appendChild(formatsBox);
+    clearTimeout(formatsBox.hideTimer);
+    formatsBox.hideTimer = setTimeout(function () {
+      if (formatsBox.parentNode) formatsBox.parentNode.removeChild(formatsBox);
+    }, 30000);
+  }
+
+  if (SHOW_FORMATS && window.Response && Response.prototype.json) {
+    var origResponseJson = Response.prototype.json;
+    Response.prototype.json = function () {
+      return origResponseJson.apply(this, arguments).then(function (result) {
+        try {
+          if (result && result.streamingData && Array.isArray(result.streamingData.adaptiveFormats)) {
+            showFormats(result.streamingData);
+          }
+        } catch (e) {}
+        return result;
+      });
+    };
+  }
+
   JSON.parse = function () {
     var result = origJsonParse.apply(this, arguments);
+    try {
+      if (SHOW_FORMATS && result && result.streamingData && Array.isArray(result.streamingData.adaptiveFormats)) {
+        showFormats(result.streamingData);
+      }
+    } catch (e) {}
     try {
       if (result && result.streamingData &&
           Array.isArray(result.streamingData.adaptiveFormats) &&
