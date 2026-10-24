@@ -134,13 +134,13 @@ COBALT_THREAD_PRIORITY_PATCHES = [
     {
         "name": "cobalt_vpx_decoder_thread_priority",
         "va": 0x101129488,
-        "expect": ("mov", "w3, #0x2"),
+        "expect": ("mov", "w3, #2"),
         "replacement": 0x52800063,  # mov w3, #3
     },
     {
         "name": "cobalt_vpx_output_thread_priority",
         "va": 0x101129EA8,
-        "expect": ("mov", "w3, #0x2"),
+        "expect": ("mov", "w3, #2"),
         "replacement": 0x52800063,  # mov w3, #3
     },
     {
@@ -158,7 +158,7 @@ COBALT_THREAD_PRIORITY_PATCHES = [
     {
         "name": "cobalt_vpx_worker_thread_resume_loop",
         "va": 0x101302ACC,
-        "expect": ("ldr", "w8, [x19, #0x8]"),
+        "expect": ("ldr", "w8, [x19, #8]"),
         "replacement": 0x1400000A,  # b 0x101302af4
     },
 ]
@@ -250,11 +250,11 @@ def restore_regs():
     return out
 
 
-def load_payload():
-    # Payload is source-of-truth JS kept in a dedicated file.
+def load_payload(path=None):
+    # Payload is source-of-truth JS kept in a dedicated file (or a minified build of it).
     # Ignore full-line // comments so notes can live in inject.js without
     # being embedded into the runtime payload.
-    text = Path(__file__).with_name("inject.js").read_text(encoding="ascii")
+    text = Path(path or Path(__file__).with_name("inject.js")).read_text(encoding="ascii")
     lines = [line for line in text.splitlines() if not line.lstrip().startswith("//")]
     cleaned = "\n".join(lines).strip()
     if not cleaned:
@@ -498,7 +498,7 @@ def build_stub(kind, stub_va, addrs, orig_ins, enable_printf_logs):
     return asm_lines(lines)
 
 
-def patch_binary(data, enable_printf_logs=False):
+def patch_binary(data, enable_printf_logs=False, inject_path=None):
     info = parse_macho_info(data)
     start, end = info["header_end"], info["text_off"]
     if start >= end:
@@ -510,7 +510,7 @@ def patch_binary(data, enable_printf_logs=False):
         data[off:off + len(blob)] = blob
         return off
 
-    js = load_payload()
+    js = load_payload(inject_path)
     # Embed runtime strings and payload in __TEXT header padding.
     offs = {
         "yttv": put(YTTV_NEEDLE + b"\0"),
@@ -636,7 +636,7 @@ def strip_supported_devices(raw):
     return out, removed
 
 
-def patch_ipa(in_path, out_path, enable_printf_logs=False, keep_supported_devices=False):
+def patch_ipa(in_path, out_path, enable_printf_logs=False, keep_supported_devices=False, inject_path=None):
     # Replace the app binary (and strip UISupportedDevices from Info.plist); preserve all other entries.
     with zipfile.ZipFile(in_path, "r") as zin:
         infos = zin.infolist()
@@ -646,7 +646,7 @@ def patch_ipa(in_path, out_path, enable_printf_logs=False, keep_supported_device
         plist_info = next((i for i in infos if re.fullmatch(r"Payload/[^/]+\.app/Info\.plist", i.filename)), None)
 
         binary = bytearray(zin.read(bin_info.filename))
-        meta = patch_binary(binary, enable_printf_logs=enable_printf_logs)
+        meta = patch_binary(binary, enable_printf_logs=enable_printf_logs, inject_path=inject_path)
 
         new_plist = None
         if plist_info and not keep_supported_devices:
@@ -670,6 +670,7 @@ def main():
     ap = argparse.ArgumentParser(description="MuTube patcher (YouTube 4.54.01)")
     ap.add_argument("--in", dest="inp", required=True, help="input IPA path")
     ap.add_argument("--out", dest="outp", required=True, help="output IPA path")
+    ap.add_argument("--inject", dest="inject", help="JS payload to embed (default: inject.js next to this script)")
     ap.add_argument(
         "--enable-printf-logs",
         action="store_true",
@@ -687,6 +688,7 @@ def main():
         args.outp,
         enable_printf_logs=args.enable_printf_logs,
         keep_supported_devices=args.keep_supported_devices,
+        inject_path=args.inject,
     )
     print("Patched IPA written to:", args.outp)
     for entry in meta:
