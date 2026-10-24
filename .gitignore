@@ -6,3 +6,4 @@ bin/
 scratch/
 __pycache__/
 build/
+tt-defaults.json

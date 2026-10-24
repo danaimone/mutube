@@ -36,6 +36,25 @@
   var CFG_KEY = 'ytaf-configuration';
   var origJsonParse = JSON.parse;
 
+  // Seed TizenTube settings from tt-defaults.json (prepended at build time as
+  // MUTUBE_TT_DEFAULTS) so a reinstall or a tvOS cache purge doesn't reset them.
+  // Only missing keys are filled, so changes made on the device win.
+  if (typeof MUTUBE_TT_DEFAULTS === 'object' && MUTUBE_TT_DEFAULTS) {
+    try {
+      var seedRaw = window.localStorage.getItem(CFG_KEY);
+      var seedCfg = seedRaw ? origJsonParse(seedRaw) : {};
+      if (!seedCfg || typeof seedCfg !== 'object') seedCfg = {};
+      var seeded = false;
+      for (var seedKey in MUTUBE_TT_DEFAULTS) {
+        if (!(seedKey in seedCfg)) {
+          seedCfg[seedKey] = MUTUBE_TT_DEFAULTS[seedKey];
+          seeded = true;
+        }
+      }
+      if (seeded) window.localStorage.setItem(CFG_KEY, JSON.stringify(seedCfg));
+    } catch (e) {}
+  }
+
   function isSettingEnabled(key) {
     try {
       var raw = window.localStorage.getItem(CFG_KEY);

@@ -20,9 +20,13 @@ endif
 .PHONY: all
 all: $(OUTPUT_IPA)
 
-$(INJECT_MIN): inject.js
+# Optional, gitignored: personal TizenTube settings seeded on first launch.
+TT_DEFAULTS := $(wildcard tt-defaults.json)
+
+$(INJECT_MIN): inject.js $(TT_DEFAULTS)
 	mkdir -p $(dir $@)
-	$(TERSER) inject.js --compress --mangle -o $@
+	{ $(if $(TT_DEFAULTS),printf 'var MUTUBE_TT_DEFAULTS = '; cat $(TT_DEFAULTS); printf ';\n';) cat inject.js; } > $(dir $@)inject.src.js
+	$(TERSER) $(dir $@)inject.src.js --compress --mangle -o $@
 
 $(OUTPUT_IPA): $(YOUTUBE_IPA) patcher.py $(INJECT_MIN)
 	uv run patcher.py --in $(YOUTUBE_IPA) --out $(OUTPUT_IPA) --inject $(INJECT_MIN) $(PATCHER_FLAGS)
