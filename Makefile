@@ -17,6 +17,12 @@ PATCHER_FLAGS += --keep-supported-devices
 endif
 endif
 
+ifneq ($(DIAG_FRAMES),)
+ifneq ($(DIAG_FRAMES),0)
+PATCHER_FLAGS += --diag-frames
+endif
+endif
+
 .PHONY: all
 all: $(OUTPUT_IPA)
 

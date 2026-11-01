@@ -40,6 +40,14 @@ original list:
 make KEEP_SUPPORTED_DEVICES=1
 ```
 
+Per-frame decode records, written to `mutube_frames.bin` in the app's `Documents`, or `Library/Caches` when the
+sandbox refuses that. Each 64-byte record holds the source plane, a centre luma sample, the destination stride
+and pixel format, the decoder's range field and the 10-bit flag:
+
+```bash
+make DIAG_FRAMES=1
+```
+
 ## Usage
 
 Sideload the generated `mutube.ipa` onto your Apple TV using a tool like [Sideloadly](https://sideloadly.io/) or [ATVLoadly](https://github.com/bitxeno/atvloadly).
