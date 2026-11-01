@@ -28,8 +28,11 @@ $(INJECT_MIN): inject.js $(TT_DEFAULTS)
 	{ $(if $(TT_DEFAULTS),printf 'var MUTUBE_TT_DEFAULTS = '; cat $(TT_DEFAULTS); printf ';\n';) cat inject.js; } > $(dir $@)inject.src.js
 	$(TERSER) $(dir $@)inject.src.js --compress --mangle -o $@
 
-$(OUTPUT_IPA): $(YOUTUBE_IPA) patcher.py $(INJECT_MIN)
+$(OUTPUT_IPA): $(YOUTUBE_IPA) patcher.py $(INJECT_MIN) FORCE
 	uv run patcher.py --in $(YOUTUBE_IPA) --out $(OUTPUT_IPA) --inject $(INJECT_MIN) $(PATCHER_FLAGS)
+
+.PHONY: FORCE
+FORCE:
 
 .PHONY: clean
 clean:

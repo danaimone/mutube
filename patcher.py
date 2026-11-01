@@ -260,7 +260,10 @@ def load_payload(path=None):
     # Payload is source-of-truth JS kept in a dedicated file (or a minified build of it).
     # Ignore full-line // comments so notes can live in inject.js without
     # being embedded into the runtime payload.
-    text = Path(path or Path(__file__).with_name("inject.js")).read_text(encoding="ascii")
+    if path is None:
+        minified = Path(__file__).parent / "build" / "inject.min.js"
+        path = minified if minified.exists() else Path(__file__).with_name("inject.js")
+    text = Path(path).read_text(encoding="ascii")
     lines = [line for line in text.splitlines() if not line.lstrip().startswith("//")]
     cleaned = "\n".join(lines).strip()
     if not cleaned:
@@ -362,7 +365,7 @@ class Allocator:
         off = self.cursor
         self.cursor += size
         if self.cursor > self.end:
-            raise ValueError("patch region out of space")
+            raise ValueError(f"patch region out of space (need {size} at {hex(off)}, end {hex(self.end)})")
         return off
 
 
@@ -703,7 +706,7 @@ def main():
     ap = argparse.ArgumentParser(description="MuTube patcher (YouTube 4.54.01)")
     ap.add_argument("--in", dest="inp", required=True, help="input IPA path")
     ap.add_argument("--out", dest="outp", required=True, help="output IPA path")
-    ap.add_argument("--inject", dest="inject", help="JS payload to embed (default: inject.js next to this script)")
+    ap.add_argument("--inject", dest="inject", help="JS payload to embed (default: build/inject.min.js if built, else inject.js)")
     ap.add_argument(
         "--enable-printf-logs",
         action="store_true",
