@@ -55,6 +55,39 @@
     } catch (e) {}
   }
 
+  // Dim Cobalt's video and caption planes without applying opacity to their
+  // parent, which blanks the paused video when the parent is composited.
+  var dimOverlayTimer = setInterval(function () {
+    var container = document.getElementById('container');
+    if (!container || !document.documentElement) return;
+
+    var overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:#000;opacity:0;pointer-events:none;z-index:2147483646;';
+    document.documentElement.appendChild(overlay);
+
+    var style = container.style;
+    var stylePrototype = Object.getPrototypeOf(style);
+    var originalSetProperty = stylePrototype.setProperty;
+    stylePrototype.setProperty = function (name, value, priority) {
+      if (this === style && name === 'opacity') {
+        var containerOpacity = parseFloat(value);
+        if (isFinite(containerOpacity)) {
+          overlay.style.opacity = String(Math.max(0, Math.min(1, 1 - containerOpacity)));
+          return originalSetProperty.call(this, name, '1', priority);
+        }
+      }
+      return originalSetProperty.apply(this, arguments);
+    };
+
+    var initialOpacity = parseFloat(window.getComputedStyle(container).opacity);
+    if (isFinite(initialOpacity) && initialOpacity < 1) {
+      overlay.style.opacity = String(1 - initialOpacity);
+      originalSetProperty.call(style, 'opacity', '1', 'important');
+    }
+
+    clearInterval(dimOverlayTimer);
+  }, 250);
+
   function isSettingEnabled(key) {
     try {
       var raw = window.localStorage.getItem(CFG_KEY);
