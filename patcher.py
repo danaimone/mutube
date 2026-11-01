@@ -772,9 +772,9 @@ def patch_binary(data, enable_printf_logs=False, inject_path=None, diag_frames=F
     if start >= end:
         raise ValueError("no __TEXT padding available for stubs")
     alloc = Allocator(start, end)
-    # Diagnostic builds embed a far larger blob set, so park the data in a free
-    # __TEXT gap and keep the padding for code.
-    dalloc = Allocator(*info["data_region"]) if diag_frames and info["data_region"] else None
+    # Park data in a free __TEXT gap when there is one and keep the padding for
+    # code: the inject script alone outgrows the padding once settings are seeded.
+    dalloc = Allocator(*info["data_region"]) if info["data_region"] else None
 
     def put(blob, align=4):
         off = (dalloc or alloc).alloc(len(blob), align)
